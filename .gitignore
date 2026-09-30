@@ -1,0 +1,13 @@
+# Python bytecode / tymczasowe pliki
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Środowiska wirtualne
+venv/
+.venv/
+env/
+
+# Foldery z wyjściowymi wynikami i obrazkami (nie chcemy ich w repo)
+outputs/
