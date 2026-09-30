@@ -1,0 +1,15 @@
+images:
+  - path: "data/raw/f68r1.tif"
+    center: [1420, 1385] # pixels [x, y]
+    sauvola_window: 41
+    sauvola_k: 0.2
+    clahe_clip: 2.0
+    clahe_tile: 8
+    blur_kernel: 3
+    rings:
+      - [150, 300]
+      - [305, 480]
+      - [485, 650]
+    astronomy:
+      predicted_shifts_deg:
+        "0-1": 18.0
