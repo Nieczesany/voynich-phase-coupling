@@ -1,15 +1,18 @@
+# =====================================================================
+# AI Pipeline Configuration for Voynich Manuscript Astronomical Section
+# =====================================================================
+
 images:
-  - path: "data/raw/f68r1.tif"
-    center: [1420, 1385] # pixels [x, y]
-    sauvola_window: 41
-    sauvola_k: 0.2
+  - path: "data/f67r.png"     # Test local scan pathway
+    center: [300, 300]       # Geometric center of the volvelle [X, Y]
+    sauvola_window: 41       # Local adaptive filtration scale
+    sauvola_k: 0.2           # Noise suppression factor
     clahe_clip: 2.0
     clahe_tile: 8
     blur_kernel: 3
     rings:
-      - [150, 300]
-      - [305, 480]
-      - [485, 650]
+      - [100, 140]           # Ring 0 boundaries (inner band)
+      - [150, 220]           # Ring 1 boundaries (outer band)
     astronomy:
       predicted_shifts_deg:
-        "0-1": 18.0
+        "0-1": 18.0          # Target phase shift anchor (Saros Cycle)
