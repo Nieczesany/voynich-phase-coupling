@@ -259,3 +259,13 @@ if __name__ == '__main__':
     parser.add_argument("--n-iters", type=int, default=10000, help="Number of null permutations")
     parser.add_argument("--n-bins", type=int, default=360, help="Angular resolution bins")
     parser.add_argument("--angular-width", type=int, default=720, help="Polar mapping pixel width")
+    parser.add_argument("--smooth-sigma", type=float, default=1.5, help="Gaussian smoothing sigma")
+    parser.add_argument("--fdr-alpha", type=float, default=0.05, help="FDR Significance Threshold")
+    parser.add_argument("--save-dir", type=str, default="outputs", help="Output directory")
+    args = parser.parse_args()
+
+    with open(args.config, 'r') as f:
+        config_data = yaml.safe_load(f)
+
+    for entry in config_data.get("images", []):
+        analyze_image(entry, args)
