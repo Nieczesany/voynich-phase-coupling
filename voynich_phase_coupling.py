@@ -239,7 +239,7 @@ def analyze_image(entry, args):
         })
         pvals.append(p)
 
-    rej, p_corr = fdr_bh(pvals, alpha=args.fdr_alpha)
+rej, p_corr = fdr_bh(pvals, alpha=args.fdr_alpha)
     for j, r in enumerate(results):
         r["p_fdr"] = float(p_corr[j])
         r["reject"] = bool(rej[j])
@@ -258,13 +258,13 @@ def analyze_image(entry, args):
             null = rotation_null_fixed_shift(x, y, shift_k, n_iter=args.n_iters)
             p = (np.sum(null >= obs) + 1.0) / (len(null) + 1.0)
 
-    simulated_exposed_tokens = ["chm", "shbty"] 
+    simulated_exposed_tokens = ["chm", "shbty"]
     gematria_results = run_gematria_validator(simulated_exposed_tokens)
 
     os.makedirs(args.save_dir, exist_ok=True)
     
     fig, ax = plt.subplots(len(sigs), 1, figsize=(10, 1.8 * len(sigs)), sharex=True)
-    if len(sigs) == 1: 
+    if len(sigs) == 1:
         ax = [ax]
     ang = np.linspace(0, 360, num=args.n_bins, endpoint=False)
     for i, s in enumerate(sigs):
