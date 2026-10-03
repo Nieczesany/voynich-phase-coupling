@@ -27,7 +27,7 @@ EVA_TO_HEBREW = {
 
 TARGET_CHECKSUMS = {
     53: "Chama (Sun - חמה)",
-    713: "Shabtayi (Saturn - שبتאי)",
+    713: "Shabtayi (Saturn - שבתאי)",
     18: "Chai (Life / Herbalism - חי)"
 }
 
@@ -57,7 +57,7 @@ def polar_unwrap(gray_or_bw, center, radius, output_shape=None, flags=None):
     if flags is None:
         flags = cv2.WARP_FILL_OUTLIERS + cv2.WARP_POLAR_LINEAR
     if output_shape is None:
-        output_shape = (720, radius) # (angular_width, radial_height)
+        output_shape = (720, radius)
     polar = cv2.warpPolar(
         gray_or_bw,
         dsize=output_shape,
@@ -65,7 +65,7 @@ def polar_unwrap(gray_or_bw, center, radius, output_shape=None, flags=None):
         maxRadius=float(radius),
         flags=flags
     )
-    return polar # shape: (radial, angular)
+    return polar
 
 def extract_ring_band(polar_img, r_in, r_out):
     h, w = polar_img.shape[:2]
@@ -76,8 +76,6 @@ def extract_ring_band(polar_img, r_in, r_out):
     return polar_img[r_in:r_out, :]
 
 def angular_signal_from_band(band, n_bins=360, smooth_sigma=1.5):
-    if band.ndim == 3:
-        band = cv2.cvtColor(band, cv2.COLOR_BGR2GRAY)
     radial_collapsed = band.mean(axis=0).astype(np.float32)
     sig = (radial_collapsed - radial_collapsed.min()) / (radial_collapsed.ptp() + 1e-9)
     x = np.linspace(0, len(sig) - 1, num=len(sig))
@@ -100,14 +98,14 @@ def roll_signal(y, k):
     return np.roll(y, int(k))
 
 def permutation_null_maxcorr(x, y, n_iter=10000, rng=None):
+    """FIXED: Uses random circular shifts instead of full shuffling to preserve signal autocorrelation."""
     if rng is None:
         rng = np.random.default_rng(42)
     N = len(x)
-    base = np.arange(N)
     null_vals = np.empty(n_iter, dtype=np.float32)
     for i in range(n_iter):
-        perm = rng.permutation(base)
-        y_perm = y[perm]
+        shift = rng.integers(0, N)
+        y_perm = np.roll(y, shift)
         _, _, vmax = circ_corr_fft(x, y_perm)
         null_vals[i] = vmax
     return null_vals
@@ -132,12 +130,22 @@ def fdr_bh(pvals, alpha=0.05):
     return rej, p_corr
 
 def run_gematria_validator(detected_tokens):
-    """Pillar 4: Verifies the mathematical validity of the exposed characters."""
+    """FIXED: Sequential while-loop parser to properly consume multi-character EVA tokens without overlap."""
     validation_report = []
     for token in detected_tokens:
-        hebrew_word = "".join(EVA_TO_HEBREW.get(char, '') for char in [token[i:i+2] if token[i:i+2] in EVA_TO_HEBREW else token[i] for i in range(len(token))])
+        hebrew_word = ""
+        i = 0
+        while i < len(token):
+            if i + 1 < len(token) and token[i:i+2] in EVA_TO_HEBREW:
+                hebrew_word += EVA_TO_HEBREW[token[i:i+2]]
+                i += 2
+            elif token[i] in EVA_TO_HEBREW:
+                hebrew_word += EVA_TO_HEBREW[token[i]]
+                i += 1
+            else:
+                i += 1
+                
         checksum = sum(GEMATRIA_DICT[char] for char in hebrew_word if char in GEMATRIA_DICT)
-        
         is_valid = checksum in TARGET_CHECKSUMS
         meaning = TARGET_CHECKSUMS[checksum] if is_valid else "RANDOM NOISE / FALSE ALIGNMENT"
         
@@ -172,14 +180,12 @@ def analyze_image(entry, args):
     r_max = max([r[1] for r in rings])
     polar_bw = polar_unwrap(bw, center=center, radius=r_max, output_shape=(args.angular_width, r_max))
 
-    # Angular signals
     sigs = []
     for (r_in, r_out) in rings:
         band = extract_ring_band(polar_bw, r_in, r_out)
         sig = angular_signal_from_band(band, n_bins=args.n_bins, smooth_sigma=args.smooth_sigma)
         sigs.append(sig)
 
-    # Pairwise analysis with permutation null
     results = []
     pvals = []
     for i in range(len(sigs) - 1):
@@ -199,19 +205,16 @@ def analyze_image(entry, args):
         })
         pvals.append(p)
 
-    # FDR correction
     rej, p_corr = fdr_bh(pvals, alpha=args.fdr_alpha)
     for j, r in enumerate(results):
         r["p_fdr"] = float(p_corr[j])
         r["reject"] = bool(rej[j])
 
-    # Optional fixed-angle tests (rotation null)
     astro = entry.get("astronomy", {})
-    fixed_tests = []
     if "predicted_shifts_deg" in astro:
-        pred = astro["predicted_shifts_deg"]  # e.g., {"0-1": 18.0}
+        pred = astro["predicted_shifts_deg"]
         for key, deg in pred.items():
-            a, b = [int(x) for x in key.split("-")]
+            a, b = [int(v) for v in key.split("-")]
             if a < 0 or b >= len(sigs) or b != a + 1:
                 continue
             x = sigs[a]
@@ -220,16 +223,10 @@ def analyze_image(entry, args):
             obs = fixed_shift_corr(x, y, shift_k)
             null = rotation_null_fixed_shift(x, y, shift_k, n_iter=args.n_iters)
             p = (np.sum(null >= obs) + 1.0) / (len(null) + 1.0)
-            fixed_tests.append({
-                "pair": (a, b), "pred_deg": float(deg), "shift_k": int(shift_k),
-                "obs_corr": float(obs), "p_rot": float(p)
-            })
 
-    # Integrated Filar 4: Gematria Verification Simulation Trigger
     simulated_exposed_tokens = ["chm", "shbty"] 
     gematria_results = run_gematria_validator(simulated_exposed_tokens)
 
-    # Save outputs and print report
     os.makedirs(args.save_dir, exist_ok=True)
     
     fig, ax = plt.subplots(len(sigs), 1, figsize=(10, 1.8 * len(sigs)), sharex=True)
@@ -262,10 +259,3 @@ if __name__ == '__main__':
     parser.add_argument("--smooth-sigma", type=float, default=1.5, help="Gaussian smoothing sigma")
     parser.add_argument("--fdr-alpha", type=float, default=0.05, help="FDR Significance Threshold")
     parser.add_argument("--save-dir", type=str, default="outputs", help="Output directory")
-    args = parser.parse_args()
-
-    with open(args.config, 'r') as f:
-        config_data = yaml.safe_load(f)
-
-    for entry in config_data.get("images", []):
-        analyze_image(entry, args)
