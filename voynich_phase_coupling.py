@@ -53,15 +53,47 @@ def binarize_sauvola(gray, window=41, k=0.2):
     bw = 255 - bw # ink = 255
     return bw
 
+def detect_exact_center(binary_img, rough_center, max_radius):
+    """Pillar 1B: Refines volvelle center using Hough Circle Transform to correct eccentricity."""
+    if isinstance(rough_center, (int, float)):
+        rc = (int(rough_center), int(rough_center))
+    else:
+        rc = (int(rough_center[0]), int(rough_center[1]))
+        
+    circles = cv2.HoughCircles(
+        binary_img, 
+        cv2.HOUGH_GRADIENT, 
+        dp=1.2, 
+        minDist=max_radius * 0.8,
+        param1=50, 
+        param2=30, 
+        minRadius=int(max_radius * 0.5), 
+        maxRadius=int(max_radius * 1.5)
+    )
+    
+    if circles is not None:
+        circles = np.uint16(np.around(circles))
+        for c in circles[0, :]:
+            # Verify if detected circle alignment is close to our rough topological seed
+            if np.linalg.norm(np.array([c[0], c[1]]) - np.array(rc)) < 50:
+                return (float(c[0]), float(c[1]))
+    return (float(rc[0]), float(rc[1]))
+
 def polar_unwrap(gray_or_bw, center, radius, output_shape=None, flags=None):
     if flags is None:
         flags = cv2.WARP_FILL_OUTLIERS + cv2.WARP_POLAR_LINEAR
     if output_shape is None:
         output_shape = (720, radius)
+        
+    if isinstance(center, (int, float)):
+        center_tuple = (float(center), float(center))
+    else:
+        center_tuple = (float(center[0]), float(center[1]))
+        
     polar = cv2.warpPolar(
         gray_or_bw,
         dsize=output_shape,
-        center=(float(center[0]), float(center[1])),
+        center=center_tuple,
         maxRadius=float(radius),
         flags=flags
     )
@@ -98,7 +130,6 @@ def roll_signal(y, k):
     return np.roll(y, int(k))
 
 def permutation_null_maxcorr(x, y, n_iter=10000, rng=None):
-    """FIXED: Uses random circular shifts instead of full shuffling to preserve signal autocorrelation."""
     if rng is None:
         rng = np.random.default_rng(42)
     N = len(x)
@@ -130,7 +161,6 @@ def fdr_bh(pvals, alpha=0.05):
     return rej, p_corr
 
 def run_gematria_validator(detected_tokens):
-    """FIXED: Sequential while-loop parser to properly consume multi-character EVA tokens without overlap."""
     validation_report = []
     for token in detected_tokens:
         hebrew_word = ""
@@ -178,7 +208,11 @@ def analyze_image(entry, args):
         raise ValueError("Center must be provided in config.")
 
     r_max = max([r[1] for r in rings])
-    polar_bw = polar_unwrap(bw, center=center, radius=r_max, output_shape=(args.angular_width, r_max))
+    
+    # Execute Pillar 1B: Automatic Eccentricity correction
+    exact_center = detect_exact_center(bw, center, r_max)
+    
+    polar_bw = polar_unwrap(bw, center=exact_center, radius=r_max, output_shape=(args.angular_width, r_max))
 
     sigs = []
     for (r_in, r_out) in rings:
@@ -247,15 +281,3 @@ def analyze_image(entry, args):
         print(f"  Pair {r['pair']} -> Max Corr: {r['vmax']:.3f} at {r['kmax_deg']:.2f}° | FDR P-value: {r['p_fdr']:.4f} | Significant: {r['reject']}")
         
     print("\n[=] GEMATRIA CHECKSUM VALIDATION REPORT:")
-    for r in gematria_results:
-        print(f"  Token {r['token']} -> Gematria Sum: {r['checksum']} | Status: {r['status']} -> Meaning: {r['meaning']}")
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Voynich Manuscript Phase-Coupling Analysis Suite")
-    parser.add_argument("--config", type=str, required=True, help="Path to configuration YAML")
-    parser.add_argument("--n-iters", type=int, default=10000, help="Number of null permutations")
-    parser.add_argument("--n-bins", type=int, default=360, help="Angular resolution bins")
-    parser.add_argument("--angular-width", type=int, default=720, help="Polar mapping pixel width")
-    parser.add_argument("--smooth-sigma", type=float, default=1.5, help="Gaussian smoothing sigma")
-    parser.add_argument("--fdr-alpha", type=float, default=0.05, help="FDR Significance Threshold")
-    parser.add_argument("--save-dir", type=str, default="outputs", help="Output directory")
