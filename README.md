@@ -1,3 +1,5 @@
+<img width="1424" height="752" alt="image_44544d9e" src="https://github.com/user-attachments/assets/c1b2adf9-e9a6-474f-aed0-ee12474c7d7f" />
+
 # Voynich MS 408: Analog-Computer Phase-Coupling Test (Python)
 
 A falsifiable, geometry-first test for the Voynich Manuscript (MS 408). We treat astronomy/astrology folios as paper-based gears (volvelles). If that’s true, adjacent concentric rings should exhibit non-random angular phase coupling.
